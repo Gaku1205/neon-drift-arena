@@ -1,9 +1,6 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# このリポジトリの注意（ゲーム）
 
-## This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- ゲームの本体は `src/`（`src/main.ts` が入口）。`index.html` は canvas を1枚置くだけ。`vite.config.ts` の `base: "./"` は exe（file://）で開くために要るので変えない
+- exe は `electron/main.cjs` が `dist/index.html` を開く。`npm run dist` が Windows の exe（`release/*.exe`）を作る（GitHub の Windows のランナーで動く）
+- 画面を撮る：`npm run build` のあと `node .github/scripts/shot.mjs --serve /`。遊んでいる途中の場面は、`/?scene=play` のように URL で直接開けるようにしておくと撮れる（`--steps` でキーを押してもよい）
+- 音は Web Audio API で作る（外の音のファイルを読み込まない）

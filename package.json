@@ -22,8 +22,8 @@
     "vitest": "^5"
   },
   "build": {
-    "appId": "com.example.game",
-    "productName": "Game",
+    "appId": "com.gaku1205.neon-drift-arena",
+    "productName": "NEON DRIFT ARENA",
     "files": ["dist/**", "electron/**"],
     "directories": { "output": "release" },
     "win": { "target": "portable" },

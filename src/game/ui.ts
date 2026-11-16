@@ -1,4 +1,5 @@
 import { formatScore, formatTime, type BestRecord, type RunResult } from "../lib/records";
+import { ACTIONS, ACTION_LABELS, DEFAULT_KEYMAP, keyLabel, type KeyMap } from "../lib/keymap";
 import { neonText } from "./neon-text";
 import { COLOR, JP_FONT } from "./palette";
 import type { View } from "./render";
@@ -83,7 +84,7 @@ function drawBand(ctx: CanvasRenderingContext2D, cx: number, y: number, w: numbe
   ctx.fillRect(cx - w / 2, y - 36 * u, 4 * u, 52 * u);
 }
 
-export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, pad: boolean, muted: boolean, sel = 0): void {
+export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, pad: boolean, muted: boolean, sel = 0, keymap: KeyMap = DEFAULT_KEYMAP): void {
   const u = v.u;
   const cy = v.H * 0.34;
   jp(ctx, "光る闘技場で、弾をすり抜け、群れを撃ち抜け。", v.W / 2, cy + 176 * u, 24 * u, COLOR.textSub, "center", 500);
@@ -103,10 +104,10 @@ export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number,
         ["オーバードライブ", ["RB"]],
       ]
     : [
-        ["移動", ["W", "A", "S", "D"]],
-        ["射撃", ["←", "↑", "↓", "→", "マウス左"]],
-        ["ドリフト", ["Space"]],
-        ["オーバードライブ", ["E"]],
+        ["移動", [keymap.moveUp, keymap.moveLeft, keymap.moveDown, keymap.moveRight].map(keyLabel)],
+        ["射撃", [keymap.aimLeft, keymap.aimUp, keymap.aimDown, keymap.aimRight].map(keyLabel).concat("マウス左")],
+        ["ドリフト", [keyLabel(keymap.dash)]],
+        ["オーバードライブ", [keyLabel(keymap.overdrive)]],
       ];
   const y = v.H - 92 * u;
   // 幅を測って、中央に並べる
@@ -154,7 +155,7 @@ export function drawPause(ctx: CanvasRenderingContext2D, v: View, sel: number): 
 
 // ───────── せってい ─────────
 
-export const SETTINGS_ITEMS = ["効果音", "伴奏"] as const;
+export const SETTINGS_ITEMS = ["効果音", "伴奏", "キーのわりあて"] as const;
 
 export function drawSettings(ctx: CanvasRenderingContext2D, v: View, sel: number, levels: readonly number[]): void {
   const u = v.u;
@@ -166,6 +167,10 @@ export function drawSettings(ctx: CanvasRenderingContext2D, v: View, sel: number
     const on = i === sel;
     if (on) drawBand(ctx, v.W / 2, y, bw, u);
     jp(ctx, item, v.W / 2 - bw / 2 + 32 * u, y, 28 * u, on ? COLOR.player : COLOR.textSub, "left", on ? 700 : 500);
+    if (i >= levels.length) {
+      jp(ctx, "Enter", v.W / 2 + bw / 2 - 20 * u, y, 22 * u, on ? COLOR.player : COLOR.textSub, "right", on ? 700 : 500);
+      return;
+    }
     // 10マスの棒（地は薄い紫、埋まった所は player）
     const level = levels[i] ?? 0;
     const cell = 20 * u;
@@ -177,8 +182,46 @@ export function drawSettings(ctx: CanvasRenderingContext2D, v: View, sel: number
     }
     jp(ctx, String(level), v.W / 2 + bw / 2 - 20 * u, y, 28 * u, on ? COLOR.player : COLOR.textSub, "right", on ? 700 : 500);
   });
-  jp(ctx, "↑↓ で選んで ←→ で変える", v.W / 2, v.H * 0.46 + SETTINGS_ITEMS.length * 72 * u + 10 * u, 16 * u, COLOR.textSub, "center", 500);
+  jp(ctx, "↑↓ で選んで ←→ で変える。キーのわりあては Enter", v.W / 2, v.H * 0.46 + SETTINGS_ITEMS.length * 72 * u + 10 * u, 16 * u, COLOR.textSub, "center", 500);
   jp(ctx, "Esc でもどる", v.W / 2, v.H * 0.46 + SETTINGS_ITEMS.length * 72 * u + 38 * u, 16 * u, COLOR.textSub, "center", 500);
+}
+
+// ───────── キーのわりあて ─────────
+
+/** 並びは操作10個＋「もとにもどす」 */
+export const KEYS_RESET_INDEX = ACTIONS.length;
+
+export function drawKeys(ctx: CanvasRenderingContext2D, v: View, sel: number, keymap: KeyMap, waiting: boolean, message: string): void {
+  const u = v.u;
+  dim(ctx, v, 0.72);
+  jp(ctx, "キーのわりあて", v.W / 2, v.H * 0.15, 52 * u, COLOR.text, "center", 700);
+  const bw = 600 * u;
+  const rowH = 44 * u;
+  const top = v.H * 0.25;
+  for (let i = 0; i <= KEYS_RESET_INDEX; i++) {
+    const y = top + i * rowH;
+    const on = i === sel;
+    if (on) {
+      ctx.fillStyle = "rgba(62,242,255,0.12)";
+      ctx.fillRect(v.W / 2 - bw / 2, y - 28 * u, bw, 40 * u);
+      ctx.fillStyle = COLOR.player;
+      ctx.fillRect(v.W / 2 - bw / 2, y - 28 * u, 4 * u, 40 * u);
+    }
+    const color = on ? COLOR.player : COLOR.textSub;
+    const weight = on ? 700 : 500;
+    const action = ACTIONS[i];
+    if (action) {
+      jp(ctx, ACTION_LABELS[action], v.W / 2 - bw / 2 + 32 * u, y, 22 * u, color, "left", weight);
+      const text = on && waiting ? "押すキーを待つ" : keyLabel(keymap[action]);
+      jp(ctx, text, v.W / 2 + bw / 2 - 20 * u, y, 22 * u, color, "right", weight);
+    } else {
+      jp(ctx, "もとにもどす", v.W / 2 - bw / 2 + 32 * u, y, 22 * u, color, "left", weight);
+    }
+  }
+  const hy = top + (KEYS_RESET_INDEX + 1) * rowH + 12 * u;
+  jp(ctx, waiting ? "割り当てたいキーを押す" : "↑↓ で選んで Enter で変える", v.W / 2, hy, 16 * u, COLOR.textSub, "center", 500);
+  jp(ctx, waiting ? "Esc でやめる" : "Esc でもどる", v.W / 2, hy + 26 * u, 16 * u, COLOR.textSub, "center", 500);
+  if (message) jp(ctx, message, v.W / 2, hy + 52 * u, 16 * u, COLOR.shard, "center", 700);
 }
 
 // ───────── 結果 ─────────

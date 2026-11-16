@@ -508,14 +508,14 @@ export function drawHudGlow(ctx: CanvasRenderingContext2D, w: World, v: View, t:
 }
 
 /** にじみの後に描く物（日本語の文字。くっきり読ませる） */
-export function drawHudText(ctx: CanvasRenderingContext2D, w: World, v: View, padHint: boolean): void {
+export function drawHudText(ctx: CanvasRenderingContext2D, w: World, v: View, padHint: boolean, overdriveKey = "E"): void {
   const u = v.u;
   const top = Math.max(10 * u, v.oy - 62 * u);
   const right = v.ox + ARENA_W * v.scale;
   const bottom = v.oy + ARENA_H * v.scale + 22 * u;
   const g = w.guardian;
   if (g && g.spawnT <= 0) jp(ctx, "ガーディアン", v.W / 2, top + 20 * u, 16 * u, COLOR.text, "center", 700);
-  if (w.overdrive >= 1) jp(ctx, padHint ? "RB で発動" : "E で発動", right - 260 * u - 200 * u, bottom + 26 * u, 16 * u, COLOR.player, "right", 700);
+  if (w.overdrive >= 1) jp(ctx, padHint ? "RB で発動" : `${overdriveKey} で発動`, right - 260 * u - 200 * u, bottom + 26 * u, 16 * u, COLOR.player, "right", 700);
   if (w.banner && w.banner.sub) {
     const b = w.banner;
     const k = 1 - b.t / b.max;

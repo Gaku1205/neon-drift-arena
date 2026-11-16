@@ -4,7 +4,8 @@ import { autopilot } from "./game/autopilot";
 import { codeOf, Input, type Frame } from "./game/input";
 import { COLOR } from "./game/palette";
 import { drawBackdrop, drawHudGlow, drawHudText, drawWorld, makeView, Post, type View } from "./game/render";
-import { drawOverGlow, drawOverText, drawPause, drawSettings, drawTitleGlow, drawTitleText, OVER_ITEMS, PAUSE_ITEMS, SETTINGS_ITEMS, type OverState } from "./game/ui";
+import { drawKeys, drawOverGlow, drawOverText, drawPause, drawSettings, drawTitleGlow, drawTitleText, KEYS_RESET_INDEX, OVER_ITEMS, PAUSE_ITEMS, SETTINGS_ITEMS, type OverState } from "./game/ui";
+import { ACTIONS, ACTION_LABELS, DEFAULT_KEYMAP, assignKey, keyLabel, parseKeymap, serializeKeymap, type KeyMap } from "./lib/keymap";
 import { parseSettings, serializeSettings, stepVolume, type Settings } from "./lib/settings";
 import { SILENT, World, type Control } from "./game/world";
 
@@ -67,19 +68,108 @@ function saveSettings(): void {
   }
 }
 
+const KEYMAP_KEY = "neon-drift-arena.keymap";
+let keymap: KeyMap;
+try {
+  keymap = parseKeymap(localStorage.getItem(KEYMAP_KEY));
+} catch {
+  keymap = DEFAULT_KEYMAP;
+}
+input.setKeymap(keymap);
+/** キーのわりあての画面が開いているか、選んでいる行、押すキーを待っているか、出しているひとこと */
+let keysOpen = false;
+let keysSel = 0;
+let keysWaiting = false;
+let keysMsg = "";
+
+function setKeymap(map: KeyMap): void {
+  keymap = map;
+  input.setKeymap(map);
+  try {
+    localStorage.setItem(KEYMAP_KEY, serializeKeymap(map));
+  } catch {
+    // 保存できなくても続ける
+  }
+}
+
 function openSettings(from: "title" | "pause"): void {
   settingsFrom = from;
   settingsSel = 0;
+  keysOpen = false;
+}
+
+/** キーのわりあての操作 */
+function updateKeys(f: Frame): void {
+  if (keysWaiting) {
+    if (f.pressedKey) {
+      if (f.pressedKey === "Escape") {
+        keysWaiting = false;
+        keysMsg = "";
+        return;
+      }
+      const action = ACTIONS[keysSel];
+      if (!action) return;
+      const r = assignKey(keymap, action, f.pressedKey);
+      if (r.ok) {
+        setKeymap(r.map);
+        keysWaiting = false;
+        keysMsg = r.swapped ? `${ACTION_LABELS[r.swapped]} と入れ替えました` : "";
+        audio.uiConfirm();
+      } else {
+        keysMsg = "そのキーは使えません";
+      }
+    } else if (f.back) {
+      keysWaiting = false;
+      keysMsg = "";
+    }
+    return;
+  }
+  const n = KEYS_RESET_INDEX + 1;
+  if (f.up) {
+    keysSel = (keysSel + n - 1) % n;
+    keysMsg = "";
+    audio.uiMove();
+  }
+  if (f.down) {
+    keysSel = (keysSel + 1) % n;
+    keysMsg = "";
+    audio.uiMove();
+  }
+  if (f.confirm) {
+    audio.uiConfirm();
+    if (keysSel === KEYS_RESET_INDEX) {
+      setKeymap(DEFAULT_KEYMAP);
+      keysMsg = "もとにもどしました";
+    } else {
+      keysWaiting = true;
+      keysMsg = "";
+    }
+  } else if (f.back || f.pause) {
+    keysOpen = false;
+    keysMsg = "";
+  }
 }
 
 /** 設定画面の操作。開いている間は他の操作を止めるので、処理したら true */
 function updateSettings(f: Frame): boolean {
   if (!settingsFrom) return false;
+  if (keysOpen) {
+    updateKeys(f);
+    return true;
+  }
   if (f.up || f.down) {
-    settingsSel = (settingsSel + 1) % SETTINGS_ITEMS.length;
+    settingsSel = (settingsSel + (f.up ? SETTINGS_ITEMS.length - 1 : 1)) % SETTINGS_ITEMS.length;
     audio.uiMove();
   }
-  const d = (f.right ? 1 : 0) - (f.left ? 1 : 0);
+  if (f.confirm && settingsSel === 2) {
+    audio.uiConfirm();
+    keysOpen = true;
+    keysSel = 0;
+    keysWaiting = false;
+    keysMsg = "";
+    return true;
+  }
+  const d = settingsSel < 2 ? (f.right ? 1 : 0) - (f.left ? 1 : 0) : 0;
   if (d !== 0) {
     const key = settingsSel === 0 ? "sfx" : "music";
     const next = stepVolume(settings[key], d);
@@ -196,7 +286,8 @@ if (startScene === "play" || startScene === "boss") {
 } else {
   world = makeDemo();
   warmUp(world, 3);
-  if (startScene === "settings") openSettings("title");
+  if (startScene === "settings" || startScene === "keys") openSettings("title");
+  if (startScene === "keys") keysOpen = true;
 }
 
 input.onFirstGesture = () => {
@@ -336,6 +427,11 @@ function update(dt: number, f: Frame, v: View): void {
   } else if (f.back) toTitle();
 }
 
+function drawSettingsOrKeys(v: View): void {
+  if (keysOpen) drawKeys(ctx, v, keysSel, keymap, keysWaiting, keysMsg);
+  else drawSettings(ctx, v, settingsSel, [settings.sfx, settings.music]);
+}
+
 function draw(v: View, f: Frame): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.globalCompositeOperation = "source-over";
@@ -368,8 +464,8 @@ function draw(v: View, f: Frame): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   if (scene === "play") {
-    if (!paused) drawHudText(ctx, world, v, padHint);
-    if (paused && settingsFrom) drawSettings(ctx, v, settingsSel, [settings.sfx, settings.music]);
+    if (!paused) drawHudText(ctx, world, v, padHint, keyLabel(keymap.overdrive));
+    if (paused && settingsFrom) drawSettingsOrKeys(v);
     else if (paused) drawPause(ctx, v, pauseSel);
     else if (input.mouseActive(performance.now()) && !autoUntilInput) {
       // 照準
@@ -388,8 +484,8 @@ function draw(v: View, f: Frame): void {
       ctx.stroke();
     }
   } else if (scene === "title") {
-    if (settingsFrom) drawSettings(ctx, v, settingsSel, [settings.sfx, settings.music]);
-    else drawTitleText(ctx, v, sceneT, best, padHint, muted, titleSel);
+    if (settingsFrom) drawSettingsOrKeys(v);
+    else drawTitleText(ctx, v, sceneT, best, padHint, muted, titleSel, keymap);
   }
   else if (over) drawOverText(ctx, v, over);
 

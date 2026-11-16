@@ -20,6 +20,8 @@ export interface Frame {
   restart: boolean;
   up: boolean;
   down: boolean;
+  left: boolean;
+  right: boolean;
   /** 何か押された（オートパイロットを止める・音を起こす） */
   anyInput: boolean;
   /** 最後に使った物（操作の案内の出し分け） */
@@ -47,6 +49,7 @@ export class Input {
   private prevPad: boolean[] = [];
   private device: "keyboard" | "pad" = "keyboard";
   private padAxisWasNeutral = true;
+  private padAxisXWasNeutral = true;
   onFirstGesture: (() => void) | null = null;
 
   constructor(target: HTMLElement) {
@@ -121,6 +124,8 @@ export class Input {
     let restart = this.hit("KeyR");
     let up = this.hit("ArrowUp", "KeyW");
     let down = this.hit("ArrowDown", "KeyS");
+    let left = this.hit("ArrowLeft", "KeyA");
+    let right = this.hit("ArrowRight", "KeyD");
     let anyInput = this.pressed.size > 0;
 
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -161,6 +166,10 @@ export class Input {
       up = up || tap(12) || (this.padAxisWasNeutral && l.y < -0.5);
       down = down || tap(13) || (this.padAxisWasNeutral && l.y > 0.5);
       this.padAxisWasNeutral = neutral;
+      const neutralX = Math.abs(l.x) < 0.5;
+      left = left || tap(14) || (this.padAxisXWasNeutral && l.x < -0.5);
+      right = right || tap(15) || (this.padAxisXWasNeutral && l.x > 0.5);
+      this.padAxisXWasNeutral = neutralX;
       if (pad.buttons.some((x) => x.pressed)) this.gesture();
       this.prevPad = pad.buttons.map((x) => x.pressed);
       break;
@@ -189,6 +198,8 @@ export class Input {
       restart,
       up,
       down,
+      left,
+      right,
       anyInput,
       device: this.device,
     };

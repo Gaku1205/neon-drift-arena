@@ -39,7 +39,7 @@ function keycap(ctx: CanvasRenderingContext2D, label: string, x: number, y: numb
 
 // ───────── タイトル ─────────
 
-export function drawTitleGlow(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, reduced: boolean): void {
+export function drawTitleGlow(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, reduced: boolean, sel = 0): void {
   const u = v.u;
   dim(ctx, v, 0.5);
   const cy = v.H * 0.34;
@@ -62,20 +62,36 @@ export function drawTitleGlow(ctx: CanvasRenderingContext2D, v: View, t: number,
   }
   // 始める合図の下線（脈打つ）
   const k = reduced ? 1 : 0.55 + 0.45 * Math.sin(t * 4);
-  ctx.globalAlpha = k;
-  ctx.fillStyle = COLOR.player;
-  ctx.fillRect(v.W / 2 - 120 * u, v.H * 0.64 + 16 * u, 240 * u, 3 * u);
-  ctx.globalAlpha = 1;
+  if (sel === 0) {
+    ctx.globalAlpha = k;
+    ctx.fillStyle = COLOR.player;
+    ctx.fillRect(v.W / 2 - 120 * u, v.H * 0.64 + 16 * u, 240 * u, 3 * u);
+    ctx.globalAlpha = 1;
+  } else {
+    drawBand(ctx, v.W / 2, v.H * 0.64 + SETTINGS_OFFSET * u, 280 * u, u);
+  }
 }
 
-export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, pad: boolean, muted: boolean): void {
+/** タイトルの「せってい」の、始める合図からの距離（×u） */
+const SETTINGS_OFFSET = 72;
+
+/** 選択中の帯（player の薄い帯＋左の縦線）。y は文字の基準線 */
+function drawBand(ctx: CanvasRenderingContext2D, cx: number, y: number, w: number, u: number): void {
+  ctx.fillStyle = "rgba(62,242,255,0.12)";
+  ctx.fillRect(cx - w / 2, y - 36 * u, w, 52 * u);
+  ctx.fillStyle = COLOR.player;
+  ctx.fillRect(cx - w / 2, y - 36 * u, 4 * u, 52 * u);
+}
+
+export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number, best: BestRecord, pad: boolean, muted: boolean, sel = 0): void {
   const u = v.u;
   const cy = v.H * 0.34;
   jp(ctx, "光る闘技場で、弾をすり抜け、群れを撃ち抜け。", v.W / 2, cy + 176 * u, 24 * u, COLOR.textSub, "center", 500);
   const blink = 0.75 + 0.25 * Math.sin(t * 4);
   ctx.globalAlpha = blink;
-  jp(ctx, pad ? "A ボタンで はじめる" : "Enter か Space で はじめる", v.W / 2, v.H * 0.64, 30 * u, COLOR.text, "center", 700);
+  jp(ctx, pad ? "A ボタンで はじめる" : "Enter か Space で はじめる", v.W / 2, v.H * 0.64, 30 * u, sel === 0 ? COLOR.text : COLOR.textSub, "center", sel === 0 ? 700 : 500);
   ctx.globalAlpha = 1;
+  jp(ctx, "せってい", v.W / 2, v.H * 0.64 + SETTINGS_OFFSET * u, 28 * u, sel === 1 ? COLOR.player : COLOR.textSub, "center", sel === 1 ? 700 : 500);
   if (best.score > 0) jp(ctx, `最高到達 ウェーブ ${best.wave}`, v.W - 40 * u, 92 * u, 16 * u, COLOR.textSub, "right", 500);
 
   // 操作の案内
@@ -116,7 +132,7 @@ export function drawTitleText(ctx: CanvasRenderingContext2D, v: View, t: number,
 
 // ───────── 一時停止 ─────────
 
-export const PAUSE_ITEMS = ["つづける", "やりなおす", "タイトルへ"] as const;
+export const PAUSE_ITEMS = ["つづける", "せってい", "やりなおす", "タイトルへ"] as const;
 
 export function drawPause(ctx: CanvasRenderingContext2D, v: View, sel: number): void {
   const u = v.u;
@@ -133,7 +149,36 @@ export function drawPause(ctx: CanvasRenderingContext2D, v: View, sel: number): 
     }
     jp(ctx, item, v.W / 2, y, 28 * u, on ? COLOR.player : COLOR.textSub, "center", on ? 700 : 500);
   });
-  jp(ctx, "↑↓ で選んで Enter", v.W / 2, v.H * 0.48 + 3 * 64 * u + 10 * u, 16 * u, COLOR.textSub, "center", 500);
+  jp(ctx, "↑↓ で選んで Enter", v.W / 2, v.H * 0.48 + PAUSE_ITEMS.length * 64 * u + 10 * u, 16 * u, COLOR.textSub, "center", 500);
+}
+
+// ───────── せってい ─────────
+
+export const SETTINGS_ITEMS = ["効果音", "伴奏"] as const;
+
+export function drawSettings(ctx: CanvasRenderingContext2D, v: View, sel: number, levels: readonly number[]): void {
+  const u = v.u;
+  dim(ctx, v, 0.72);
+  jp(ctx, "せってい", v.W / 2, v.H * 0.3, 52 * u, COLOR.text, "center", 700);
+  const bw = 600 * u;
+  SETTINGS_ITEMS.forEach((item, i) => {
+    const y = v.H * 0.46 + i * 72 * u;
+    const on = i === sel;
+    if (on) drawBand(ctx, v.W / 2, y, bw, u);
+    jp(ctx, item, v.W / 2 - bw / 2 + 32 * u, y, 28 * u, on ? COLOR.player : COLOR.textSub, "left", on ? 700 : 500);
+    // 10マスの棒（地は薄い紫、埋まった所は player）
+    const level = levels[i] ?? 0;
+    const cell = 20 * u;
+    const gap = 6 * u;
+    const x0 = v.W / 2 - 40 * u;
+    for (let k = 0; k < 10; k++) {
+      ctx.fillStyle = k < level ? COLOR.player : "rgba(169,163,214,0.16)";
+      ctx.fillRect(x0 + k * (cell + gap), y - 22 * u, cell, 24 * u);
+    }
+    jp(ctx, String(level), v.W / 2 + bw / 2 - 20 * u, y, 28 * u, on ? COLOR.player : COLOR.textSub, "right", on ? 700 : 500);
+  });
+  jp(ctx, "↑↓ で選んで ←→ で変える", v.W / 2, v.H * 0.46 + SETTINGS_ITEMS.length * 72 * u + 10 * u, 16 * u, COLOR.textSub, "center", 500);
+  jp(ctx, "Esc でもどる", v.W / 2, v.H * 0.46 + SETTINGS_ITEMS.length * 72 * u + 38 * u, 16 * u, COLOR.textSub, "center", 500);
 }
 
 // ───────── 結果 ─────────

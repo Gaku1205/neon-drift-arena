@@ -3,6 +3,10 @@
  * 効果音と、拍に乗る伴奏（124 BPM・Aマイナー）。
  */
 
+import { VOLUME_MAX, volumeGain } from "../lib/settings";
+
+const SFX_BASE = 0.9;
+const MUSIC_BASE = 0.42;
 const BPM = 124;
 const STEP = 60 / BPM / 4; // 16分音符
 // Am - F - C - G（各1小節）の根音（MIDI）
@@ -33,6 +37,8 @@ export class Audio {
   /** 伴奏の厚さ：0=タイトル、1〜4=遊んでいる（波で上がる） */
   intensity = 0;
   muted = false;
+  private sfxLevel = VOLUME_MAX;
+  private musicLevel = VOLUME_MAX;
 
   /** 最初の操作で呼ぶ（ブラウザは操作の前に音を鳴らせない） */
   start(): void {
@@ -54,7 +60,7 @@ export class Audio {
     this.master.gain.value = 0.8;
     this.master.connect(comp);
     this.sfx = ctx.createGain();
-    this.sfx.gain.value = 0.9;
+    this.sfx.gain.value = volumeGain(this.sfxLevel, SFX_BASE);
     this.sfx.connect(this.master);
     this.musicFilter = ctx.createBiquadFilter();
     this.musicFilter.type = "lowpass";
@@ -62,7 +68,7 @@ export class Audio {
     this.musicFilter.Q.value = 0.8;
     this.musicFilter.connect(this.master);
     this.music = ctx.createGain();
-    this.music.gain.value = 0.42;
+    this.music.gain.value = volumeGain(this.musicLevel, MUSIC_BASE);
     this.music.connect(this.musicFilter);
 
     const len = ctx.sampleRate;
@@ -82,6 +88,18 @@ export class Audio {
   setMuted(m: boolean): void {
     this.muted = m;
     if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05);
+  }
+
+  /** 効果音の音量（段階 0〜10）。M キーのミュートとは別 */
+  setSfxVolume(level: number): void {
+    this.sfxLevel = level;
+    if (this.ctx) this.sfx.gain.setTargetAtTime(volumeGain(level, SFX_BASE), this.ctx.currentTime, 0.02);
+  }
+
+  /** 伴奏の音量（段階 0〜10）。M キーのミュートとは別 */
+  setMusicVolume(level: number): void {
+    this.musicLevel = level;
+    if (this.ctx) this.music.gain.setTargetAtTime(volumeGain(level, MUSIC_BASE), this.ctx.currentTime, 0.02);
   }
 
   /** 一時停止や被弾で、伴奏をこもらせる（0=こもる 1=開く） */

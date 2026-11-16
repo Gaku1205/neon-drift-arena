@@ -409,4 +409,15 @@ function frame(now: number): void {
   draw(v, f);
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+// 日本語の書体（同梱の M PLUS 1）の読み込みを待ってから描き始める。失敗しても予備の書体で始める
+async function loadFonts(): Promise<void> {
+  try {
+    await Promise.all([document.fonts.load('500 16px "MPLUS1Game"'), document.fonts.load('700 16px "MPLUS1Game"')]);
+  } catch {
+    // 読めなくても、予備の書体で始める
+  }
+}
+void loadFonts().then(() => {
+  last = performance.now();
+  requestAnimationFrame(frame);
+});

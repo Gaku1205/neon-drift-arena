@@ -22,8 +22,8 @@ export const COLOR = {
   white: "#ffffff",
 } as const;
 
-/** 画面の文字の書体（日本語）。Windows の書体を先に */
-export const JP_FONT = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", "Hiragino Sans", sans-serif';
+/** 画面の文字の書体（日本語）。同梱の M PLUS 1 を先に、予備に Windows の書体 */
+export const JP_FONT = '"MPLUS1Game", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", "Hiragino Sans", sans-serif';
 
 /** 闘技場の大きさ（論理座標） */
 export const ARENA_W = 1600;

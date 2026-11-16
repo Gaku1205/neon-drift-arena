@@ -4,7 +4,8 @@ import { autopilot } from "./game/autopilot";
 import { codeOf, Input, type Frame } from "./game/input";
 import { COLOR } from "./game/palette";
 import { drawBackdrop, drawHudGlow, drawHudText, drawWorld, makeView, Post, type View } from "./game/render";
-import { drawOverGlow, drawOverText, drawPause, drawTitleGlow, drawTitleText, OVER_ITEMS, PAUSE_ITEMS, type OverState } from "./game/ui";
+import { drawOverGlow, drawOverText, drawPause, drawSettings, drawTitleGlow, drawTitleText, OVER_ITEMS, PAUSE_ITEMS, SETTINGS_ITEMS, type OverState } from "./game/ui";
+import { parseSettings, serializeSettings, stepVolume, type Settings } from "./lib/settings";
 import { SILENT, World, type Control } from "./game/world";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -42,6 +43,56 @@ try {
   muted = localStorage.getItem(MUTE_KEY) === "1";
 } catch {
   muted = false;
+}
+
+const SETTINGS_KEY = "neon-drift-arena.settings";
+let settings: Settings;
+try {
+  settings = parseSettings(localStorage.getItem(SETTINGS_KEY));
+} catch {
+  settings = parseSettings(null);
+}
+audio.setSfxVolume(settings.sfx);
+audio.setMusicVolume(settings.music);
+/** 設定画面が開いているか（どこから開いたか）と、選んでいる項目 */
+let settingsFrom: "title" | "pause" | null = null;
+let settingsSel = 0;
+let titleSel = 0;
+
+function saveSettings(): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, serializeSettings(settings));
+  } catch {
+    // 保存できなくても続ける
+  }
+}
+
+function openSettings(from: "title" | "pause"): void {
+  settingsFrom = from;
+  settingsSel = 0;
+}
+
+/** 設定画面の操作。開いている間は他の操作を止めるので、処理したら true */
+function updateSettings(f: Frame): boolean {
+  if (!settingsFrom) return false;
+  if (f.up || f.down) {
+    settingsSel = (settingsSel + 1) % SETTINGS_ITEMS.length;
+    audio.uiMove();
+  }
+  const d = (f.right ? 1 : 0) - (f.left ? 1 : 0);
+  if (d !== 0) {
+    const key = settingsSel === 0 ? "sfx" : "music";
+    const next = stepVolume(settings[key], d);
+    if (next !== settings[key]) {
+      settings = { ...settings, [key]: next };
+      if (key === "sfx") audio.setSfxVolume(next);
+      else audio.setMusicVolume(next);
+      saveSettings();
+      if (key === "sfx") audio.uiMove();
+    }
+  }
+  if (f.back || f.pause) settingsFrom = null;
+  return true;
 }
 
 type Scene = "title" | "play" | "over";
@@ -145,6 +196,7 @@ if (startScene === "play" || startScene === "boss") {
 } else {
   world = makeDemo();
   warmUp(world, 3);
+  if (startScene === "settings") openSettings("title");
 }
 
 input.onFirstGesture = () => {
@@ -207,7 +259,19 @@ function update(dt: number, f: Frame, v: View): void {
     if (world.state !== "playing" || world.time > 70) {
       world = makeDemo();
     }
-    if (f.confirm) startGame();
+    if (updateSettings(f)) return;
+    if (f.up || f.down) {
+      titleSel = 1 - titleSel;
+      audio.uiMove();
+    }
+    if (f.confirm) {
+      if (titleSel === 1) {
+        audio.start();
+        audio.setMuted(muted);
+        audio.uiConfirm();
+        openSettings("title");
+      } else startGame();
+    }
     return;
   }
 
@@ -217,6 +281,7 @@ function update(dt: number, f: Frame, v: View): void {
       audio.start();
     }
     if (paused) {
+      if (updateSettings(f)) return;
       if (f.up) {
         pauseSel = (pauseSel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length;
         audio.uiMove();
@@ -233,6 +298,9 @@ function update(dt: number, f: Frame, v: View): void {
         if (item === "つづける") {
           paused = false;
           audio.setMusicOpen(1);
+        } else if (item === "せってい") {
+          audio.uiConfirm();
+          openSettings("pause");
         } else if (item === "やりなおす") startGame();
         else toTitle();
       }
@@ -286,7 +354,7 @@ function draw(v: View, f: Frame): void {
 
   const padHint = f.device === "pad";
   if (scene === "play") drawHudGlow(ctx, world, v, clock, best.score, paused);
-  else if (scene === "title") drawTitleGlow(ctx, v, sceneT, best, reduced);
+  else if (scene === "title" && !settingsFrom) drawTitleGlow(ctx, v, sceneT, best, reduced, titleSel);
   else if (over) drawOverGlow(ctx, v, over);
 
   if (world.fx.flash > 0) {
@@ -301,7 +369,8 @@ function draw(v: View, f: Frame): void {
 
   if (scene === "play") {
     if (!paused) drawHudText(ctx, world, v, padHint);
-    if (paused) drawPause(ctx, v, pauseSel);
+    if (paused && settingsFrom) drawSettings(ctx, v, settingsSel, [settings.sfx, settings.music]);
+    else if (paused) drawPause(ctx, v, pauseSel);
     else if (input.mouseActive(performance.now()) && !autoUntilInput) {
       // 照準
       ctx.strokeStyle = COLOR.player;
@@ -318,7 +387,10 @@ function draw(v: View, f: Frame): void {
       ctx.lineTo(f.mouseX, f.mouseY + 18);
       ctx.stroke();
     }
-  } else if (scene === "title") drawTitleText(ctx, v, sceneT, best, padHint, muted);
+  } else if (scene === "title") {
+    if (settingsFrom) drawSettings(ctx, v, settingsSel, [settings.sfx, settings.music]);
+    else drawTitleText(ctx, v, sceneT, best, padHint, muted, titleSel);
+  }
   else if (over) drawOverText(ctx, v, over);
 
   canvas!.style.cursor = scene === "play" && !paused ? "none" : "default";

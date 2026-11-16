@@ -1,3 +1,4 @@
+import { DEFAULT_KEYMAP, type KeyMap } from "../lib/keymap";
 import { applyDeadzone } from "../lib/math";
 
 /** 1フレームぶんの入力（キーボード・マウス・ゲームパッドをまとめた物） */
@@ -24,6 +25,8 @@ export interface Frame {
   right: boolean;
   /** 何か押された（オートパイロットを止める・音を起こす） */
   anyInput: boolean;
+  /** このフレームに押された最初のキーの code（割り当ての「押すキーを待つ」で使う。無ければ null） */
+  pressedKey: string | null;
   /** 最後に使った物（操作の案内の出し分け） */
   device: "keyboard" | "pad";
 }
@@ -40,6 +43,7 @@ export function codeOf(e: KeyboardEvent): string {
 }
 
 export class Input {
+  private keymap: KeyMap = DEFAULT_KEYMAP;
   private held = new Set<string>();
   private pressed = new Set<string>();
   private mouseDown = false;
@@ -106,18 +110,26 @@ export class Input {
 
   /** 今のフレームの入力を読む（読んだら「押した瞬間」は消える） */
   read(): Frame {
-    let moveX = (this.key("KeyD") ? 1 : 0) - (this.key("KeyA") ? 1 : 0);
-    let moveY = (this.key("KeyS") ? 1 : 0) - (this.key("KeyW") ? 1 : 0);
-    let aimX = (this.key("ArrowRight") ? 1 : 0) - (this.key("ArrowLeft") ? 1 : 0);
-    let aimY = (this.key("ArrowDown") ? 1 : 0) - (this.key("ArrowUp") ? 1 : 0);
+    const km = this.keymap;
+    let moveX = (this.key(km.moveRight) ? 1 : 0) - (this.key(km.moveLeft) ? 1 : 0);
+    let moveY = (this.key(km.moveDown) ? 1 : 0) - (this.key(km.moveUp) ? 1 : 0);
+    let aimX = (this.key(km.aimRight) ? 1 : 0) - (this.key(km.aimLeft) ? 1 : 0);
+    let aimY = (this.key(km.aimDown) ? 1 : 0) - (this.key(km.aimUp) ? 1 : 0);
     let aiming = aimX !== 0 || aimY !== 0;
     let mouseAim = false;
     if (!aiming && this.mouseDown) {
       mouseAim = true;
       aiming = true;
     }
-    let dash = this.hit("Space", "ShiftLeft", "ShiftRight");
-    let overdrive = this.hit("KeyE", "KeyQ");
+    let dash = this.hit(km.dash);
+    let overdrive = this.hit(km.overdrive);
+    let pressedKey: string | null = null;
+    for (const c of this.pressed) {
+      if (c !== "Mouse0") {
+        pressedKey = c;
+        break;
+      }
+    }
     let pause = this.hit("Escape", "KeyP");
     let confirm = this.hit("Enter", "Space", "NumpadEnter");
     let back = this.hit("Escape", "Backspace");
@@ -201,8 +213,14 @@ export class Input {
       left,
       right,
       anyInput,
+      pressedKey,
       device: this.device,
     };
+  }
+
+  /** 割り当てを入れ替える */
+  setKeymap(map: KeyMap): void {
+    this.keymap = map;
   }
 
   /** マウスが最近動いたか（照準を出すため） */
